@@ -1,0 +1,3 @@
+requests
+pillow
+numpy  # only needed to rebuild swatches via catalog/collect_catalog.py
