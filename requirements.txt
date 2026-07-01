@@ -1,3 +1,6 @@
-requests
+fastapi
+uvicorn[standard]
+python-multipart
 pillow
-numpy  # only needed to rebuild swatches via catalog/collect_catalog.py
+requests
+numpy
