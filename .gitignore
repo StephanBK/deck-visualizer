@@ -9,3 +9,4 @@ backend/uploads/*
 *.env
 node_modules/
 render/outputs/
+backend/usage_counts.json

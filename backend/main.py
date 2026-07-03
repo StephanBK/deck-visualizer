@@ -32,9 +32,16 @@ ENV VARS:
   RESULT_TTL_HOURS  (optional) delete results older than this, default 24.
                     (Railway's disk is ephemeral anyway — reps should use the
                     download button for anything they want to keep.)
+  MAX_RENDERS_PER_DAY / MAX_RENDERS_PER_MONTH  (optional) hard spend cap on
+                    Gemini calls (~$0.04 each). Defaults 50/day, 500/month
+                    (= about $20/mo). When exhausted the API returns 429
+                    instead of calling Gemini. Counter lives in a local file,
+                    so it resets on redeploy — it's a safety net against
+                    runaway/abusive use, not accounting.
 """
 
 import io
+import json
 import os
 import sys
 import time
@@ -66,6 +73,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_UPLOAD_MB = float(os.environ.get("MAX_UPLOAD_MB", "15"))
 RESULT_TTL_HOURS = float(os.environ.get("RESULT_TTL_HOURS", "24"))
+MAX_RENDERS_PER_DAY = int(os.environ.get("MAX_RENDERS_PER_DAY", "50"))
+MAX_RENDERS_PER_MONTH = int(os.environ.get("MAX_RENDERS_PER_MONTH", "500"))
+USAGE_PATH = os.path.join(HERE, "usage_counts.json")
 
 app = FastAPI(title="Deck Visualizer API", version="0.2")
 
@@ -80,6 +90,38 @@ if _origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+def _read_usage():
+    try:
+        with open(USAGE_PATH) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def take_render_slot():
+    """Hard spend cap: count every Gemini call, refuse with 429 once the daily
+    or monthly budget is used up. Called from the (single-threaded) event loop
+    BEFORE the render is dispatched, so check+increment can't race."""
+    day = time.strftime("%Y-%m-%d")
+    month = day[:7]
+    usage = _read_usage()
+    today, this_month = usage.get(day, 0), usage.get(month, 0)
+    if today >= MAX_RENDERS_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Daily render budget used up ({MAX_RENDERS_PER_DAY}/day). Try again tomorrow.")
+    if this_month >= MAX_RENDERS_PER_MONTH:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Monthly render budget used up ({MAX_RENDERS_PER_MONTH}/month).")
+    try:
+        with open(USAGE_PATH, "w") as f:
+            # only the current day + month keys are needed; old ones fall away
+            json.dump({day: today + 1, month: this_month + 1}, f)
+    except OSError:
+        pass  # never block renders on a bookkeeping failure
 
 
 def cleanup_old_results():
@@ -109,7 +151,14 @@ def root():
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "materials": len(pb.load_catalog())}
+    day = time.strftime("%Y-%m-%d")
+    usage = _read_usage()
+    return {
+        "status": "ok",
+        "materials": len(pb.load_catalog()),
+        "renders_today": f"{usage.get(day, 0)}/{MAX_RENDERS_PER_DAY}",
+        "renders_this_month": f"{usage.get(day[:7], 0)}/{MAX_RENDERS_PER_MONTH}",
+    }
 
 
 @app.get("/api/materials")
@@ -144,6 +193,7 @@ async def render(
         material = pb.get_material(material_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown material_id: {material_id}")
+    take_render_slot()
 
     data = await photo.read()
     if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
@@ -221,6 +271,7 @@ async def fusion(req: FusionRequest):
                                 detail=f"Unknown material_id: {req.material_id}")
 
     instruction = pb.build_fusion_instruction(material)
+    take_render_slot()
     try:
         hero_img = await run_in_threadpool(generate_image, paths, instruction)
     except GeminiError as e:
