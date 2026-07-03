@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { createHero } from "../api.js";
+import { createHero, shareImage } from "../api.js";
 
 // The "fusion hero shot": pick up to 3 rendered results, get back one
 // golden-hour marketing render. Always labeled as an AI rendering.
-export default function HeroSection({ donePhotos, materialId }) {
+export default function HeroSection({ doneJobs, projectId }) {
   const [picked, setPicked] = useState([]);
   const [hero, setHero] = useState({ status: "idle", url: null, error: null });
 
@@ -18,14 +18,20 @@ export default function HeroSection({ donePhotos, materialId }) {
   }
 
   async function generate() {
-    const names = picked.length ? picked : [donePhotos[0].resultName];
+    const names = picked.length ? picked : [doneJobs[0].resultName];
+    const materialId = doneJobs.find((j) => j.resultName === names[0])?.materialId;
     setHero({ status: "rendering", url: null, error: null });
     try {
-      const { hero_url } = await createHero(names, materialId);
+      const { hero_url } = await createHero(names, materialId, projectId);
       setHero({ status: "done", url: hero_url, error: null });
     } catch (e) {
       setHero({ status: "error", url: null, error: e.message });
     }
+  }
+
+  async function share() {
+    const ok = await shareImage(hero.url, "Concept rendering of your new deck");
+    if (!ok) window.open(hero.url, "_blank");
   }
 
   return (
@@ -37,15 +43,15 @@ export default function HeroSection({ donePhotos, materialId }) {
       </p>
 
       <div className="hero-pick-row">
-        {donePhotos.map((p) => {
-          const idx = picked.indexOf(p.resultName);
+        {doneJobs.map((j) => {
+          const idx = picked.indexOf(j.resultName);
           return (
             <button
-              key={p.id}
+              key={j.id}
               className={`hero-pick ${idx >= 0 ? "picked" : ""}`}
-              onClick={() => togglePick(p.resultName)}
+              onClick={() => togglePick(j.resultName)}
             >
-              <img src={p.afterUrl} alt="Rendered result" />
+              <img src={j.afterUrl} alt={`Rendered in ${j.materialName}`} />
               {idx >= 0 && <span className="order">{idx + 1}</span>}
             </button>
           );
@@ -71,12 +77,9 @@ export default function HeroSection({ donePhotos, materialId }) {
             <span className="ai-badge">AI rendering — not a photograph</span>
           </div>
           <div className="hero-actions">
-            <a className="btn-secondary" href={hero.url} download>
-              ↓ Save hero shot
-            </a>
-            <button className="btn-secondary" onClick={generate}>
-              ↻ Regenerate
-            </button>
+            <button className="btn-secondary" onClick={share}>↗ Share</button>
+            <a className="btn-secondary" href={hero.url} download>↓ Save</a>
+            <button className="btn-secondary" onClick={generate}>↻ Regenerate</button>
           </div>
         </>
       )}

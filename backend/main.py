@@ -10,9 +10,11 @@ WHAT A BACKEND IS (and why the iPad needs one):
 ENDPOINTS:
   GET  /api/materials        -> the catalog (so the app can build the picker)
   GET  /api/swatches/<file>  -> a swatch image (served as a static file)
-  POST /api/render           -> upload a deck photo + material_id (+ mode/toggles),
-                                get a rendered image URL
+  POST /api/render           -> upload a deck photo + material_id (+ mode/toggles,
+                                optional project_id), get a rendered image URL
   POST /api/fusion           -> combine 1-3 rendered results into one hero shot
+  POST /api/auth             -> validate the app PIN (when APP_PIN is set)
+  GET/POST /api/projects     -> saved customer projects (renders persist per project)
   GET  /api/results/<file>   -> a rendered image (served as a static file)
   GET  /healthz              -> simple health check
   GET  /docs                 -> auto-generated interactive API tester (FastAPI gives this free)
@@ -32,6 +34,10 @@ ENV VARS:
   RESULT_TTL_HOURS  (optional) delete results older than this, default 24.
                     (Railway's disk is ephemeral anyway — reps should use the
                     download button for anything they want to keep.)
+  APP_PIN           (optional) when set, API calls need it in the X-App-Pin
+                    header; the frontend asks for it once and remembers it.
+  DATA_DIR          (optional) persistent dir (Railway volume, e.g. /data) for
+                    results, projects, and the spend counter.
   MAX_RENDERS_PER_DAY / MAX_RENDERS_PER_MONTH  (optional) hard spend cap on
                     Gemini calls (~$0.04 each). Defaults 50/day, 500/month
                     (= about $20/mo). When exhausted the API returns 429
@@ -47,12 +53,12 @@ import sys
 import time
 import uuid
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import Depends, FastAPI, UploadFile, File, Form, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 from starlette.concurrency import run_in_threadpool
 
 # --- make the render engine (in ../render) importable from here ---
@@ -60,7 +66,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 RENDER_DIR = os.path.normpath(os.path.join(HERE, "..", "render"))
 CATALOG_DIR = os.path.normpath(os.path.join(HERE, "..", "catalog"))
 SWATCH_DIR = os.path.join(CATALOG_DIR, "swatches")
-RESULTS_DIR = os.path.join(HERE, "results")
+# DATA_DIR: set to a persistent mount (e.g. Railway volume at /data) so
+# results, saved projects, and the spend counter survive redeploys.
+DATA_DIR = os.environ.get("DATA_DIR") or HERE
+RESULTS_DIR = os.path.join(DATA_DIR, "results")
+PROJECTS_DIR = os.path.join(DATA_DIR, "projects")
 UPLOAD_DIR = os.path.join(HERE, "uploads")
 FRONTEND_DIST = os.path.normpath(os.path.join(HERE, "..", "frontend", "dist"))
 sys.path.insert(0, RENDER_DIR)
@@ -69,13 +79,17 @@ import prompt_builder as pb                             # noqa: E402
 from gemini_edit import generate_image, GeminiError     # noqa: E402
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(PROJECTS_DIR, exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 MAX_UPLOAD_MB = float(os.environ.get("MAX_UPLOAD_MB", "15"))
 RESULT_TTL_HOURS = float(os.environ.get("RESULT_TTL_HOURS", "24"))
 MAX_RENDERS_PER_DAY = int(os.environ.get("MAX_RENDERS_PER_DAY", "50"))
 MAX_RENDERS_PER_MONTH = int(os.environ.get("MAX_RENDERS_PER_MONTH", "500"))
-USAGE_PATH = os.path.join(HERE, "usage_counts.json")
+USAGE_PATH = os.path.join(DATA_DIR, "usage_counts.json")
+# APP_PIN: when set, every data/render API call must carry it in the
+# X-App-Pin header. Unset (local dev) = the gate is off.
+APP_PIN = os.environ.get("APP_PIN", "").strip()
 
 app = FastAPI(title="Deck Visualizer API", version="0.2")
 
@@ -90,6 +104,57 @@ if _origins:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+
+def require_pin(x_app_pin: str = Header(default="")):
+    """Gate for API endpoints. No-op when APP_PIN is unset (local dev)."""
+    if APP_PIN and x_app_pin != APP_PIN:
+        raise HTTPException(status_code=401, detail="PIN required")
+
+
+DISCLAIMER = "AI VISUALIZATION - NOT A PHOTOGRAPH"  # plain hyphen: the PIL default font has no em-dash glyph
+
+
+def stamp_disclaimer(img):
+    """Bake the AI disclaimer into the image itself, bottom-right. The UI badge
+    is only an overlay — downloaded/shared files must carry the label too."""
+    img = img.convert("RGB")
+    d = ImageDraw.Draw(img, "RGBA")
+    size = max(13, img.width // 60)
+    try:
+        font = ImageFont.load_default(size=size)
+    except TypeError:  # older Pillow: fixed-size bitmap font
+        font = ImageFont.load_default()
+    tw = d.textlength(DISCLAIMER, font=font)
+    pad = max(6, size // 2)
+    x1, y1 = img.width - 10, img.height - 10
+    x0, y0 = x1 - tw - pad * 2, y1 - size - pad * 2
+    d.rounded_rectangle([x0, y0, x1, y1], radius=6, fill=(0, 0, 0, 130))
+    d.text((x0 + pad, y0 + pad), DISCLAIMER, font=font, fill=(255, 255, 255, 225))
+    return img
+
+
+# ---------------- projects (persistent customer sessions) ----------------
+
+def _project_path(pid):
+    safe = os.path.basename(pid)
+    if not safe.replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Bad project id")
+    return os.path.join(PROJECTS_DIR, f"{safe}.json")
+
+
+def load_project(pid):
+    try:
+        with open(_project_path(pid)) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        raise HTTPException(status_code=404, detail=f"Unknown project: {pid}")
+
+
+def save_project(proj):
+    proj["updated_at"] = time.time()
+    with open(_project_path(proj["id"]), "w") as f:
+        json.dump(proj, f)
 
 
 def _read_usage():
@@ -130,6 +195,8 @@ def cleanup_old_results():
     try:
         for name in os.listdir(RESULTS_DIR):
             path = os.path.join(RESULTS_DIR, name)
+            if name.startswith("p_"):
+                continue  # files linked to a saved project are kept forever
             if name != ".gitkeep" and os.path.isfile(path) and os.path.getmtime(path) < cutoff:
                 os.remove(path)
     except OSError:
@@ -161,7 +228,19 @@ def healthz():
     }
 
 
-@app.get("/api/materials")
+class AuthRequest(BaseModel):
+    pin: str
+
+
+@app.post("/api/auth")
+def auth(req: AuthRequest):
+    """Lets the frontend validate a PIN once before storing it locally."""
+    if APP_PIN and req.pin != APP_PIN:
+        raise HTTPException(status_code=401, detail="Wrong PIN")
+    return {"ok": True, "pin_required": bool(APP_PIN)}
+
+
+@app.get("/api/materials", dependencies=[Depends(require_pin)])
 def list_materials():
     """Return the catalog, with a ready-to-use swatch URL added to each record."""
     mats = pb.load_catalog()
@@ -170,20 +249,64 @@ def list_materials():
     return {"count": len(mats), "materials": mats}
 
 
-def _save_result(img) -> str:
-    """Save a rendered PIL image into RESULTS_DIR; return its filename."""
-    name = f"{uuid.uuid4().hex}.jpg"
-    img.save(os.path.join(RESULTS_DIR, name), quality=90)
-    return name
+# ---------------- project endpoints ----------------
+
+class ProjectCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80)
 
 
-@app.post("/api/render")
+@app.post("/api/projects", dependencies=[Depends(require_pin)])
+def create_project(req: ProjectCreate):
+    proj = {
+        "id": uuid.uuid4().hex[:12],
+        "name": req.name.strip(),
+        "created_at": time.time(),
+        "updated_at": time.time(),
+        "items": [],    # appended by /api/render when project_id is passed
+        "heroes": [],   # appended by /api/fusion
+    }
+    save_project(proj)
+    return {"id": proj["id"], "name": proj["name"]}
+
+
+@app.get("/api/projects", dependencies=[Depends(require_pin)])
+def list_projects():
+    out = []
+    try:
+        names = os.listdir(PROJECTS_DIR)
+    except OSError:
+        names = []
+    for name in names:
+        if not name.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(PROJECTS_DIR, name)) as f:
+                p = json.load(f)
+            out.append({
+                "id": p["id"], "name": p["name"],
+                "created_at": p["created_at"], "updated_at": p["updated_at"],
+                "item_count": len(p.get("items", [])),
+                "cover_url": (p.get("items") or [{}])[-1].get("after_url"),
+            })
+        except (OSError, ValueError, KeyError):
+            continue
+    out.sort(key=lambda p: p["updated_at"], reverse=True)
+    return {"projects": out}
+
+
+@app.get("/api/projects/{pid}", dependencies=[Depends(require_pin)])
+def get_project(pid: str):
+    return load_project(pid)
+
+
+@app.post("/api/render", dependencies=[Depends(require_pin)])
 async def render(
     photo: UploadFile = File(...),
     material_id: str = Form(...),
     mode: str = Form("resurface"),
     declutter: bool = Form(False),
     stage_furniture: bool = Form(False),
+    project_id: str = Form(None),
 ):
     """Upload a deck photo + a material id (+ options) -> URL of the rendered image."""
     # 1. validate inputs
@@ -193,6 +316,8 @@ async def render(
         material = pb.get_material(material_id)
     except KeyError:
         raise HTTPException(status_code=404, detail=f"Unknown material_id: {material_id}")
+    if project_id:
+        load_project(project_id)  # 404s before burning budget (re-loaded fresh at save time)
     take_render_slot()
 
     data = await photo.read()
@@ -228,12 +353,37 @@ async def render(
         except OSError:
             pass
 
-    # 4. save the result and hand back its URL
+    # 4. stamp the AI disclaimer, save, and hand back the URL. Files that
+    #    belong to a saved project get a p_ prefix (exempt from TTL cleanup).
     cleanup_old_results()
-    result_name = _save_result(result_img)
+    result_img = stamp_disclaimer(result_img)
+    hexid = uuid.uuid4().hex
+    prefix = "p_" if project_id else ""
+    result_name = f"{prefix}{hexid}.jpg"
+    result_img.save(os.path.join(RESULTS_DIR, result_name), quality=90)
+
+    before_url = None
+    if project_id:
+        before_name = f"p_{hexid}_before.jpg"
+        Image.open(io.BytesIO(data)).convert("RGB").save(
+            os.path.join(RESULTS_DIR, before_name), quality=88)
+        before_url = f"/api/results/{before_name}"
+        # Re-load fresh and append/save with no awaits in between: concurrent
+        # renders into the same project must not clobber each other's items.
+        project = load_project(project_id)
+        project["items"].append({
+            "before_url": before_url,
+            "after_url": f"/api/results/{result_name}",
+            "material_id": material["id"],
+            "material_name": material["name"],
+            "brand": material["brand"],
+            "mode": mode,
+            "created_at": time.time(),
+        })
+        save_project(project)
 
     return JSONResponse({
-        "render_id": os.path.splitext(result_name)[0],
+        "render_id": hexid,
         "material": {
             "id": material["id"],
             "name": material["name"],
@@ -243,15 +393,17 @@ async def render(
         },
         "mode": mode,
         "after_url": f"/api/results/{result_name}",
+        "before_url": before_url,
     })
 
 
 class FusionRequest(BaseModel):
     result_names: list[str] = Field(..., min_length=1, max_length=3)
     material_id: str | None = None
+    project_id: str | None = None
 
 
-@app.post("/api/fusion")
+@app.post("/api/fusion", dependencies=[Depends(require_pin)])
 async def fusion(req: FusionRequest):
     """Combine 1-3 already-rendered results into one polished marketing hero shot."""
     paths = []
@@ -270,6 +422,8 @@ async def fusion(req: FusionRequest):
             raise HTTPException(status_code=404,
                                 detail=f"Unknown material_id: {req.material_id}")
 
+    if req.project_id:
+        load_project(req.project_id)  # validate before burning budget
     instruction = pb.build_fusion_instruction(material)
     take_render_slot()
     try:
@@ -277,9 +431,17 @@ async def fusion(req: FusionRequest):
     except GeminiError as e:
         raise HTTPException(status_code=502, detail=f"Hero render failed: {e}")
 
-    hero_name = f"hero_{uuid.uuid4().hex}.jpg"
+    hero_img = stamp_disclaimer(hero_img)
+    prefix = "p_" if req.project_id else ""
+    hero_name = f"{prefix}hero_{uuid.uuid4().hex}.jpg"
     hero_img.save(os.path.join(RESULTS_DIR, hero_name), quality=90)
-    return JSONResponse({"hero_url": f"/api/results/{hero_name}"})
+    hero_url = f"/api/results/{hero_name}"
+    if req.project_id:
+        # fresh load + sync append/save — same race note as /api/render
+        project = load_project(req.project_id)
+        project["heroes"].append({"hero_url": hero_url, "created_at": time.time()})
+        save_project(project)
+    return JSONResponse({"hero_url": hero_url})
 
 
 # Serve the built frontend (frontend/dist) at the root. MUST be the last route:

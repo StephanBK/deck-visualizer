@@ -1,6 +1,13 @@
 // All talk with the FastAPI backend lives here.
 // Same-origin in prod (FastAPI serves dist/); proxied by Vite in dev.
 
+export class AuthError extends Error {}
+
+function pinHeaders(extra = {}) {
+  const pin = localStorage.getItem("appPin");
+  return pin ? { ...extra, "X-App-Pin": pin } : extra;
+}
+
 async function errorDetail(res, fallback) {
   try {
     const data = await res.json();
@@ -11,9 +18,28 @@ async function errorDetail(res, fallback) {
   return fallback;
 }
 
+async function checkOk(res, fallback) {
+  if (res.ok) return;
+  if (res.status === 401) throw new AuthError("PIN required");
+  const err = new Error(await errorDetail(res, fallback));
+  err.status = res.status;
+  throw err;
+}
+
+export async function verifyPin(pin) {
+  const res = await fetch("/api/auth", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin }),
+  });
+  if (res.status === 401) return false;
+  await checkOk(res, "Couldn't verify PIN");
+  return true;
+}
+
 export async function fetchMaterials() {
-  const res = await fetch("/api/materials");
-  if (!res.ok) throw new Error(await errorDetail(res, `Couldn't load materials (${res.status})`));
+  const res = await fetch("/api/materials", { headers: pinHeaders() });
+  await checkOk(res, `Couldn't load materials (${res.status})`);
   const data = await res.json();
   return data.materials ?? data;
 }
@@ -41,24 +67,68 @@ export async function compressImage(file, maxSide = 1600) {
   }
 }
 
-export async function renderPhoto(file, { materialId, mode, declutter, stageFurniture }) {
+export async function renderPhoto(file, { materialId, mode, declutter, stageFurniture, projectId }, signal) {
   const fd = new FormData();
   fd.append("photo", file);
   fd.append("material_id", materialId);
   fd.append("mode", mode);
   fd.append("declutter", String(declutter));
   fd.append("stage_furniture", String(stageFurniture));
-  const res = await fetch("/api/render", { method: "POST", body: fd });
-  if (!res.ok) throw new Error(await errorDetail(res, `Render failed (${res.status})`));
+  if (projectId) fd.append("project_id", projectId);
+  const res = await fetch("/api/render", { method: "POST", body: fd, headers: pinHeaders(), signal });
+  await checkOk(res, `Render failed (${res.status})`);
   return res.json();
 }
 
-export async function createHero(resultNames, materialId) {
+export async function createHero(resultNames, materialId, projectId) {
   const res = await fetch("/api/fusion", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ result_names: resultNames, material_id: materialId || null }),
+    headers: pinHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      result_names: resultNames,
+      material_id: materialId || null,
+      project_id: projectId || null,
+    }),
   });
-  if (!res.ok) throw new Error(await errorDetail(res, `Hero render failed (${res.status})`));
+  await checkOk(res, `Hero render failed (${res.status})`);
   return res.json();
+}
+
+export async function createProject(name) {
+  const res = await fetch("/api/projects", {
+    method: "POST",
+    headers: pinHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ name }),
+  });
+  await checkOk(res, "Couldn't create project");
+  return res.json();
+}
+
+export async function listProjects() {
+  const res = await fetch("/api/projects", { headers: pinHeaders() });
+  await checkOk(res, "Couldn't load projects");
+  return (await res.json()).projects;
+}
+
+export async function getProject(id) {
+  const res = await fetch(`/api/projects/${id}`, { headers: pinHeaders() });
+  await checkOk(res, "Couldn't load project");
+  return res.json();
+}
+
+// Native share sheet (Mail / Messages / WhatsApp on iPad). Returns false when
+// the browser can't share files — caller should fall back to download.
+export async function shareImage(url, text) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const file = new File([blob], url.split("/").pop() || "deck.jpg", { type: "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], text });
+      return true;
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return true; // user closed the sheet — not an error
+  }
+  return false;
 }
