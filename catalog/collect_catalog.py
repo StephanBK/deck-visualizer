@@ -67,22 +67,33 @@ def make_grain_swatch(hexval, w=W, h=H):
 def download_swatch(url):
     """Return a PIL image from a swatch URL, or None on failure.
 
-    Trex images come off a Scene7 server; ?wid sizes them. We request a
-    reasonable width and JPG so files stay small.
+    Trex images come off a Scene7 server ("/is/image/"); ?wid sizes them and
+    we request JPG so files stay small. Other hosts (e.g. TimberTech's
+    WordPress uploads, incl. .webp) are fetched as-is — PIL decodes them.
     """
-    sep = "&" if "?" in url else "?"
-    sized = f"{url}{sep}wid={W}&fmt=jpg&qlt=85"
-    for attempt in range(2):
-        try:
-            r = requests.get(sized, headers={"User-Agent": UA}, timeout=20)
-            r.raise_for_status()
-            return Image.open(io.BytesIO(r.content)).convert("RGB")
-        except Exception as e:
-            if attempt == 0:
-                time.sleep(1.0)
-                continue
-            print(f"    ! download failed ({e.__class__.__name__}); using placeholder")
-            return None
+    if "/is/image/" in url:
+        sep = "&" if "?" in url else "?"
+        candidates = [f"{url}{sep}wid={W}&fmt=jpg&qlt=85"]
+    else:
+        # try full-size first; fall back to the thumbnail if the sized
+        # variant was the only real file (e.g. ...-150x150.webp)
+        candidates = [url]
+        import re as _re
+        if not _re.search(r"-\d+x\d+\.(jpe?g|png|webp)$", url):
+            candidates.append(_re.sub(r"\.(jpe?g|png|webp)$", r"-150x150.\1", url))
+    for sized in candidates:
+        for attempt in range(2):
+            try:
+                r = requests.get(sized, headers={"User-Agent": UA}, timeout=20)
+                r.raise_for_status()
+                return Image.open(io.BytesIO(r.content)).convert("RGB")
+            except Exception as e:
+                if attempt == 0:
+                    time.sleep(1.0)
+                    continue
+                err = e.__class__.__name__
+    print(f"    ! download failed ({err}); using placeholder")
+    return None
 
 
 def main():
