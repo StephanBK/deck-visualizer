@@ -4,6 +4,33 @@ DECK VISUALIZER — lead-co-sd
 WHAT'S IN HERE
   catalog/   the 64-material catalog + 64 swatch images (catalog/swatches/)
   render/    the Gemini render engine + the test command (try_one.py)
+  backend/   FastAPI server (the iPad talks to this; it holds the Gemini key)
+  frontend/  React + Vite app (source in src/, built output in dist/)
+
+RUN THE APP LOCALLY
+  Backend:   cd backend && python3 -m uvicorn main:app --reload --port 8000
+  Frontend (dev, hot reload):  cd frontend && npm install && npm run dev
+      -> open http://localhost:5173 (proxies /api to :8000)
+  Frontend (as in prod):  cd frontend && npm run build
+      -> then just open http://localhost:8000 (FastAPI serves frontend/dist)
+
+BEFORE PUSHING TO GITHUB (deploys to Railway!)
+  cd frontend && npm run build
+  Then commit — frontend/dist/ is committed ON PURPOSE. Railway has no Node:
+  it builds Python only and serves the dist/ you committed. If you forget the
+  build, production serves the previous frontend.
+  (Alternative for later: add a nixpacks.toml with nodejs + `npm ci && npm run
+  build` as a build cmd — only works if the Railway service uses Nixpacks, not
+  Railpack. Committing dist avoids that whole class of surprise.)
+
+PRODUCTION NOTES
+  - Railway config: Root Directory blank; Start Command
+      sh -c "cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT"
+    GEMINI_API_KEY set in the Railway Variables tab.
+  - Optional env vars: MAX_UPLOAD_MB (default 15), RESULT_TTL_HOURS (default
+    24), ALLOWED_ORIGINS (leave unset — frontend is same-origin, no CORS needed).
+  - Railway's disk is EPHEMERAL: rendered results vanish on each deploy and
+    after RESULT_TTL_HOURS. Use the app's Save/download buttons to keep images.
 
 ONE-TIME SETUP (do this once)
   1. Open Terminal.
