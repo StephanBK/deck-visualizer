@@ -107,12 +107,12 @@
       "collection": "Transcend Earth Tones",
       "name": "Spiced Rum",
       "color_family": "red",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/trn-3inch-001-sr-decking-sample-profile-SRT35000",
       "description": "Deep red-brown with subtle black streaking; tropical warmth.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-transcend-earth-tones-spiced-rum.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-transcend-earth-tones-spiced-rum.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 600
     },
     {
       "id": "trex-transcend-earth-tones-lava-rock",
@@ -121,12 +121,12 @@
       "collection": "Transcend Earth Tones",
       "name": "Lava Rock",
       "color_family": "dark",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/trn-3inch-001-lr-decking-sample-profile-LRT35000",
       "description": "Charcoal near-black with dark streaking.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-transcend-earth-tones-lava-rock.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-transcend-earth-tones-lava-rock.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-transcend-earth-tones-tiki-torch",
@@ -135,12 +135,12 @@
       "collection": "Transcend Earth Tones",
       "name": "Tiki Torch",
       "color_family": "brown",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/trn-3inch-001-tt-decking-sample-profile-TTT35000",
       "description": "Warm honey brown with golden undertones.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-transcend-earth-tones-tiki-torch.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-transcend-earth-tones-tiki-torch.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-transcend-earth-tones-vintage-lantern",
@@ -163,12 +163,12 @@
       "collection": "Transcend Earth Tones",
       "name": "Rope Swing",
       "color_family": "brown",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/trn-3inch-001-rs-decking-sample-profile-RST35000",
       "description": "Medium tan-brown, soft and natural.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-transcend-earth-tones-rope-swing.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-transcend-earth-tones-rope-swing.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-transcend-tropicals-havana-gold",
@@ -177,12 +177,12 @@
       "collection": "Transcend Tropicals",
       "name": "Havana Gold",
       "color_family": "brown",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/trn-3inch-001-hg-decking-sample-profile-HGT35000",
       "description": "Golden tan with dramatic darker-brown streaking.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-transcend-tropicals-havana-gold.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-transcend-tropicals-havana-gold.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-transcend-tropicals-tree-house",
@@ -219,12 +219,12 @@
       "collection": "Select",
       "name": "Millstone",
       "color_family": "grey",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/sel-3inch-001-ms-decking-sample-profile-MS2S35000",
       "description": "Weathered grey with charcoal undertones.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-select-millstone.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-select-millstone.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-select-golden-hour",
@@ -275,12 +275,12 @@
       "collection": "Select",
       "name": "Saddle",
       "color_family": "brown",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/sel-3inch-001-sd-decking-sample-profile-SDS35000",
       "description": "Classic warm mid-brown.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-select-saddle.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-select-saddle.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-select-pebble-grey",
@@ -289,12 +289,12 @@
       "collection": "Select",
       "name": "Pebble Grey",
       "color_family": "grey",
-      "swatch_url": null,
+      "swatch_url": "https://images.trex.com/is/image/trexcompany/sel-3inch-001-pg-decking-sample-profile-PGS35000",
       "description": "Soft neutral grey.",
-      "swatch_source": "generated_placeholder",
-      "swatch_path": "swatches/trex-select-pebble-grey.png",
+      "swatch_source": "downloaded_real",
+      "swatch_path": "swatches/trex-select-pebble-grey.jpg",
       "swatch_w": 600,
-      "swatch_h": 400
+      "swatch_h": 401
     },
     {
       "id": "trex-select-madeira",

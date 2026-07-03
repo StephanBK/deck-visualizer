@@ -51,24 +51,24 @@ GROUPS = [
         ("Hatteras",    "brown",   "#8f7a5f", TREX_IMG+"lin-3inch-001-ht-decking-sample-profile-HTTL35000", "Neutral windswept brown evoking surf and sand."),
     ]),
     dict(brand="Trex", collection="Transcend Earth Tones", material_type="composite", rows=[
-        ("Spiced Rum",      "red",   "#6b4530", None, "Deep red-brown with subtle black streaking; tropical warmth."),
-        ("Lava Rock",       "dark",  "#3f3b39", None, "Charcoal near-black with dark streaking."),
-        ("Tiki Torch",      "brown", "#9c6b3b", None, "Warm honey brown with golden undertones."),
+        ("Spiced Rum",      "red",   "#6b4530", "https://images.trex.com/is/image/trexcompany/trn-3inch-001-sr-decking-sample-profile-SRT35000", "Deep red-brown with subtle black streaking; tropical warmth."),
+        ("Lava Rock",       "dark",  "#3f3b39", "https://images.trex.com/is/image/trexcompany/trn-3inch-001-lr-decking-sample-profile-LRT35000", "Charcoal near-black with dark streaking."),
+        ("Tiki Torch",      "brown", "#9c6b3b", "https://images.trex.com/is/image/trexcompany/trn-3inch-001-tt-decking-sample-profile-TTT35000", "Warm honey brown with golden undertones."),
         ("Vintage Lantern", "red",   "#7a4332", None, "Red-brown with rustic, weathered character."),
-        ("Rope Swing",      "brown", "#9c8567", None, "Medium tan-brown, soft and natural."),
+        ("Rope Swing",      "brown", "#9c8567", "https://images.trex.com/is/image/trexcompany/trn-3inch-001-rs-decking-sample-profile-RST35000", "Medium tan-brown, soft and natural."),
     ]),
     dict(brand="Trex", collection="Transcend Tropicals", material_type="composite", rows=[
-        ("Havana Gold", "brown", "#a9793f", None, "Golden tan with dramatic darker-brown streaking."),
+        ("Havana Gold", "brown", "#a9793f", "https://images.trex.com/is/image/trexcompany/trn-3inch-001-hg-decking-sample-profile-HGT35000", "Golden tan with dramatic darker-brown streaking."),
         ("Tree House",  "brown", "#6f543b", None, "Rich variegated brown with multi-tonal grain."),
     ]),
     dict(brand="Trex", collection="Select", material_type="composite", rows=[
         ("Malted Barley", "brown",   "#8a7558", None, "Earthy browns and soft greys with milled-grain character."),
-        ("Millstone",     "grey",    "#6f6c66", None, "Weathered grey with charcoal undertones."),
+        ("Millstone",     "grey",    "#6f6c66", "https://images.trex.com/is/image/trexcompany/sel-3inch-001-ms-decking-sample-profile-MS2S35000", "Weathered grey with charcoal undertones."),
         ("Golden Hour",   "brown",   "#b08a55", None, "Sun-kissed golden hue with coconut-brown undertones."),
         ("Pebble Beach",  "grey",    "#a8a59d", None, "Light-toned weathered grey with natural wood grain."),
         ("Martis Valley", "neutral", "#c0ad8f", None, "Airy sunlit beige drifting between sand and sea-worn stone."),
-        ("Saddle",        "brown",   "#7c5c3c", None, "Classic warm mid-brown."),  # legacy color, verify
-        ("Pebble Grey",   "grey",    "#9b9890", None, "Soft neutral grey."),       # legacy color, verify
+        ("Saddle",        "brown",   "#7c5c3c", "https://images.trex.com/is/image/trexcompany/sel-3inch-001-sd-decking-sample-profile-SDS35000", "Classic warm mid-brown."),  # legacy color, verify
+        ("Pebble Grey",   "grey",    "#9b9890", "https://images.trex.com/is/image/trexcompany/sel-3inch-001-pg-decking-sample-profile-PGS35000", "Soft neutral grey."),       # legacy color, verify
         ("Madeira",       "red",     "#5e4031", None, "Dark red-brown, rich and traditional."),  # legacy color, verify
     ]),
     dict(brand="Trex", collection="Enhance", material_type="composite", rows=[
