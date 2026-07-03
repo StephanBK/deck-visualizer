@@ -637,6 +637,91 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
   margin: 14px 0;
 }
 
+/* ============ Home screen (service picker) ============ */
+.home-lead {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 18px 2px 12px;
+}
+.service-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+.service-card {
+  position: relative;
+  text-align: left;
+  background: var(--panel);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  padding: 18px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 132px;
+  transition: transform 0.12s ease, border-color 0.15s ease;
+}
+.service-card:active { transform: scale(0.985); }
+.service-card.live {
+  border-color: var(--accent);
+  background: linear-gradient(160deg, var(--accent-soft), var(--panel) 55%);
+}
+.service-card.soon { opacity: 0.92; }
+.service-icon { font-size: 30px; line-height: 1; margin-bottom: 6px; }
+.service-name { font-size: 16px; font-weight: 720; letter-spacing: -0.01em; }
+.service-tag { font-size: 12.5px; color: var(--text-dim); line-height: 1.35; }
+.service-cta {
+  margin-top: auto;
+  padding-top: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+.soon-chip {
+  display: inline-block;
+  margin-top: auto;
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 720;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: var(--panel-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+}
+.service-card .soon-chip { padding-top: 4px; }
+
+/* coming-soon pitch sheet */
+.soon-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.soon-icon { font-size: 34px; }
+.soon-headline { font-size: 16px; font-weight: 680; margin: 8px 0 6px; }
+.soon-points { margin: 0 0 12px; padding-left: 20px; }
+.soon-points li { font-size: 13.5px; margin: 6px 0; line-height: 1.4; }
+.soon-note {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 0 0 14px;
+}
+
+/* back button in the deck header */
+.back-btn {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  font-size: 15px;
+  flex: none;
+  align-self: center;
+  box-shadow: var(--shadow-soft);
+}
+
 /* ============ PIN screen ============ */
 .pin-screen {
   min-height: 100vh;

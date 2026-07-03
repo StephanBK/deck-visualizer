@@ -30,7 +30,7 @@ export default function PinScreen({ onSuccess }) {
     <div className="pin-screen">
       <div className="pin-card">
         <h1>
-          Deck <em>Visualizer</em>
+          Home <em>Visualizer</em>
         </h1>
         <p>Enter the team PIN to continue.</p>
         <form onSubmit={submit}>

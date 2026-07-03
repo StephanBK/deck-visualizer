@@ -11,6 +11,7 @@ import HeroSection from "./components/HeroSection.jsx";
 import PinScreen from "./components/PinScreen.jsx";
 import ProjectBar from "./components/ProjectBar.jsx";
 import FullscreenViewer from "./components/FullscreenViewer.jsx";
+import HomeScreen from "./components/HomeScreen.jsx";
 
 let nextId = 1;
 
@@ -24,6 +25,7 @@ function readJSON(key, fallback) {
 
 export default function App() {
   const [authed, setAuthed] = useState(null); // null=checking, false=locked, true=in
+  const [screen, setScreen] = useState("home"); // 'home' | 'deck'
   const [materials, setMaterials] = useState([]);
   const [loadError, setLoadError] = useState(null);
   const [photos, setPhotos] = useState([]);
@@ -158,9 +160,33 @@ export default function App() {
 
   if (authed === false) return <PinScreen onSuccess={loadMaterials} />;
 
+  if (screen === "home") {
+    return (
+      <div className="app">
+        <header className="header">
+          <h1>
+            Home <em>Visualizer</em>
+          </h1>
+          <span className="tagline">See it before it's built</span>
+        </header>
+        <ProjectBar project={project} onSelect={setProject} />
+        {loadError && (
+          <div className="error-banner">
+            Couldn't reach the server: {loadError}.{" "}
+            <button className="btn-secondary" onClick={loadMaterials}>Retry</button>
+          </div>
+        )}
+        <HomeScreen onOpenService={(id) => id === "deck" && setScreen("deck")} />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="header">
+        <button className="back-btn" onClick={() => setScreen("home")} aria-label="Back to services">
+          ←
+        </button>
         <h1>
           Deck <em>Visualizer</em>
         </h1>
