@@ -125,5 +125,4 @@ async def render(photo: UploadFile = File(...), material_id: str = Form(...)):
         },
         "after_url": f"/api/results/{result_name}",
     })
-from fastapi.staticfiles import StaticFiles
 app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")

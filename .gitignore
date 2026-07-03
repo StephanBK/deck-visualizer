@@ -8,3 +8,4 @@ backend/uploads/*
 .env
 *.env
 node_modules/
+render/outputs/
