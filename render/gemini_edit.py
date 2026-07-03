@@ -67,8 +67,12 @@ def _extract_image(resp_json):
     raise GeminiError(f"Model returned no image. Model said: {note}")
 
 
-def edit_deck_photo(deck_photo_path, swatch_path, instruction, retries=1):
-    """Return a PIL image: the deck photo edited to wear the swatch material."""
+def generate_image(image_paths, instruction, retries=1):
+    """Send N input images + one instruction to Gemini; return the edited PIL image.
+
+    image_paths order matters — the instruction refers to "FIRST image",
+    "SECOND image", etc.
+    """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise GeminiError(
@@ -76,16 +80,12 @@ def edit_deck_photo(deck_photo_path, swatch_path, instruction, retries=1):
             "Get a free key at https://aistudio.google.com/apikey"
         )
 
+    parts = [{"text": instruction}]
+    for path in image_paths:
+        parts.append({"inline_data": {"mime_type": "image/jpeg",
+                                      "data": _img_to_b64_jpeg(path)}})
     payload = {
-        "contents": [{
-            "parts": [
-                {"text": instruction},
-                {"inline_data": {"mime_type": "image/jpeg",
-                                 "data": _img_to_b64_jpeg(deck_photo_path)}},
-                {"inline_data": {"mime_type": "image/jpeg",
-                                 "data": _img_to_b64_jpeg(swatch_path)}},
-            ]
-        }],
+        "contents": [{"parts": parts}],
         # Ask explicitly for an image back. If the API errors on this field,
         # try removing it or switching casing to ["Image","Text"].
         "generationConfig": {"responseModalities": ["IMAGE", "TEXT"]},
@@ -106,3 +106,8 @@ def edit_deck_photo(deck_photo_path, swatch_path, instruction, retries=1):
                 continue
             raise
     raise last_err  # unreachable, but explicit
+
+
+def edit_deck_photo(deck_photo_path, swatch_path, instruction, retries=1):
+    """Return a PIL image: the deck photo edited to wear the swatch material."""
+    return generate_image([deck_photo_path, swatch_path], instruction, retries=retries)

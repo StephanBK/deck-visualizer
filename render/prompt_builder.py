@@ -1,5 +1,5 @@
 """
-prompt_builder.py  —  turns a chosen material into a Gemini instruction.
+prompt_builder.py  —  turns a chosen material + options into a Gemini instruction.
 
 THE CORE IDEA (from the build plan):
   The salesperson never types a description. They pick a material; the code
@@ -9,6 +9,16 @@ THE CORE IDEA (from the build plan):
   The template spends as many words on what to KEEP as on what to CHANGE.
   That "keep unchanged" list is what stops the model from quietly redrawing
   railings, furniture, or the whole perspective.
+
+MODES:
+  resurface  — swap only the deck floor boards (most reliable).
+  replace    — rebuild the whole deck structure (boards, railings, stairs)
+               in the new material.
+  build_new  — the photo has no deck; construct one where it plausibly fits.
+
+TOGGLES (composable with any mode):
+  declutter        — remove loose clutter, keep permanent fixtures.
+  stage_furniture  — add tasteful modern outdoor furniture.
 """
 
 import json
@@ -17,6 +27,8 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 CATALOG_DIR = os.path.normpath(os.path.join(HERE, "..", "catalog"))
 SEED_PATH = os.path.join(CATALOG_DIR, "catalog_seed.json")
+
+MODES = ("resurface", "replace", "build_new")
 
 
 def load_catalog():
@@ -37,34 +49,138 @@ def swatch_abs_path(material):
     return os.path.join(CATALOG_DIR, material["swatch_path"])
 
 
-# The fill-in-the-blank template. {name} and {description} get replaced.
-INSTRUCTION_TEMPLATE = (
-    "You are editing the FIRST image: a real photograph of an existing outdoor deck. "
-    "Your task is a MATERIAL SWAP that must be clearly visible. Resurface EVERY deck "
-    "floor board so it takes on the decking material shown in the SECOND image — "
-    "{name}: {description}. The boards' color, tone, and wood-grain finish must fully "
-    "match the sample, completely replacing their current appearance. Match the "
-    "sample's color precisely, even if it is much darker or lighter than the current "
-    "boards — do NOT preserve the original deck color. "
-    "Apply it across the entire deck surface, following the existing board direction, "
-    "perspective, and lighting so it reads as real installed decking. "
-    "Everything that is NOT the deck floor must stay EXACTLY as in the original: "
-    "railings, posts, stairs, furniture, umbrellas, planters, plants, the house, "
-    "fence, background, any people, and the overall lighting and camera angle. "
-    "Do not add, remove, move, or resize any object. Only the deck boards change."
+# --- what to CHANGE, per mode ({name}/{description} get filled in) -----------
+
+MODE_TEMPLATES = {
+    "resurface": (
+        "You are editing the FIRST image: a real photograph of an existing outdoor deck. "
+        "Your task is a MATERIAL SWAP that must be clearly visible. Resurface EVERY deck "
+        "floor board so it takes on the decking material shown in the SECOND image — "
+        "{name}: {description}. The boards' color, tone, and wood-grain finish must fully "
+        "match the sample, completely replacing their current appearance. Match the "
+        "sample's color precisely, even if it is much darker or lighter than the current "
+        "boards — do NOT preserve the original deck color. "
+        "Apply it across the entire deck surface, following the existing board direction, "
+        "perspective, and lighting so it reads as real installed decking."
+    ),
+    "replace": (
+        "You are editing the FIRST image: a real photograph of an existing outdoor deck. "
+        "Your task is a FULL DECK REPLACEMENT that must be clearly visible. Rebuild the "
+        "entire deck structure — floor boards, railings, posts, balusters, stairs, and "
+        "fascia — as a brand-new deck made of the decking material shown in the SECOND "
+        "image — {name}: {description}. Use a clean, modern railing design that "
+        "coordinates with the new material. The new deck must occupy the same footprint, "
+        "height, and orientation as the original, and match the photo's perspective and "
+        "lighting so it reads as a real, professionally built installation. Match the "
+        "sample's color precisely — do NOT preserve the original deck's color or style."
+    ),
+    "build_new": (
+        "You are editing the FIRST image: a real photograph of a home's outdoor space "
+        "that has no deck (or only a bare patch, lawn, or old patio where one could go). "
+        "Your task is to CONSTRUCT A NEW DECK as a concept rendering. Design and add a "
+        "realistic, professionally built deck made of the decking material shown in the "
+        "SECOND image — {name}: {description} — placed where a deck most plausibly fits "
+        "(typically attached to the house, replacing the bare/underused area). Size and "
+        "proportion it sensibly for the space, include simple coordinated railings if "
+        "the height calls for them, and match the photo's perspective, sunlight, and "
+        "shadows so it reads as if it were really there."
+    ),
+}
+
+# --- what to KEEP, per mode ---------------------------------------------------
+# Assembled separately so the toggles below can relax it without contradiction.
+
+KEEP_LISTS = {
+    "resurface": (
+        "Everything that is NOT the deck floor must stay EXACTLY as in the original: "
+        "railings, posts, stairs, {things}, the house, fence, background, any people, "
+        "and the overall lighting and camera angle."
+    ),
+    "replace": (
+        "Everything that is NOT the deck structure must stay EXACTLY as in the "
+        "original: {things}, the house, fence, yard, background, any people, and the "
+        "overall lighting and camera angle."
+    ),
+    "build_new": (
+        "Everything else must stay EXACTLY as in the original: {things}, the house and "
+        "its doors/windows, fence, background, any people, and the overall "
+        "lighting and camera angle."
+    ),
+}
+
+# Objects normally protected by the keep-list. Staging/decluttering may remove
+# or add such objects, so the wording adapts to the toggles.
+KEEP_THINGS = "furniture, umbrellas, planters, plants"
+
+STRICT_CLAUSE = "Do not add, remove, move, or resize any object."
+
+DECLUTTER_CLAUSE = (
+    "Also DECLUTTER the space: remove loose clutter such as hoses, toys, tarps, "
+    "bins, tools, cushions in disarray, and stray debris. Keep permanent fixtures "
+    "(built-in seating, grills, large planters, lighting) in place."
+)
+
+STAGE_CLAUSE = (
+    "Also STAGE the finished deck with tasteful, modern outdoor furniture "
+    "appropriate to its size — for example a lounge or dining set and a couple of "
+    "planters — arranged naturally, as a professional stager would."
 )
 
 
-def build_instruction(material):
-    return INSTRUCTION_TEMPLATE.format(
+def build_instruction(material, mode="resurface", declutter=False, stage_furniture=False):
+    """Full Gemini instruction for one render: mode template + keep-list + toggles."""
+    if mode not in MODES:
+        raise ValueError(f"unknown mode: {mode!r} (expected one of {MODES})")
+
+    change = MODE_TEMPLATES[mode].format(
         name=material["name"],
         description=material["description"].rstrip("."),
     )
 
+    # If staging or decluttering, furniture/planters are fair game — drop them
+    # from the keep-list so the instruction doesn't contradict itself.
+    things = KEEP_THINGS if not (declutter or stage_furniture) else "plants"
+    keep = KEEP_LISTS[mode].format(things=things)
+
+    parts = [change, keep]
+    if declutter:
+        parts.append(DECLUTTER_CLAUSE)
+    if stage_furniture:
+        parts.append(STAGE_CLAUSE)
+    if not declutter and not stage_furniture:
+        parts.append(STRICT_CLAUSE)
+    return " ".join(parts)
+
+
+def build_fusion_instruction(material=None):
+    """Instruction for the 'fusion hero shot': one polished marketing render
+    combined from already-rendered result image(s). Clearly a rendering, so it
+    may relight and restage — but the material and architecture must not drift."""
+    material_note = (
+        f"The decking material is {material['name']} "
+        f"({material['description'].rstrip('.')}); its color, tone, and grain must "
+        "stay exactly as shown. "
+        if material else
+        "The decking material's color, tone, and grain must stay exactly as shown. "
+    )
+    return (
+        "The attached image(s) show a finished deck project (AI renderings of the "
+        "same deck). Produce ONE polished marketing hero image of this deck: warm "
+        "golden-hour lighting, gently staged with tasteful modern outdoor furniture, "
+        "clean composition with subtle depth, photorealistic quality. "
+        + material_note +
+        "Keep the deck's structure, the house, and all architecture identical to the "
+        "source image(s) — this is a beauty shot of the SAME project, not a new design."
+    )
+
 
 if __name__ == "__main__":
-    # quick demo: show the instruction for a couple of materials
-    for mid in ("trex-transcend-lineage-biscayne", "wood-ipe-brazilian-walnut"):
-        m = get_material(mid)
-        print(f"\n=== {m['name']} ({m['swatch_source']}) ===")
-        print(build_instruction(m))
+    # quick demo: one material through every mode, plus toggles and the hero shot
+    m = get_material("trex-transcend-lineage-biscayne")
+    for mode in MODES:
+        print(f"\n=== {mode} ===")
+        print(build_instruction(m, mode=mode))
+    print("\n=== resurface + declutter + stage ===")
+    print(build_instruction(m, declutter=True, stage_furniture=True))
+    print("\n=== fusion hero ===")
+    print(build_fusion_instruction(m))
