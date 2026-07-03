@@ -30,9 +30,7 @@ export default function HeroSection({ donePhotos, materialId }) {
 
   return (
     <div className="hero-card">
-      <div className="section-title">
-        <span className="step">★</span> Hero shot
-      </div>
+      <div className="section-title">✨ Hero shot</div>
       <p className="section-sub">
         Combine your favorite result(s) into one polished, golden-hour marketing
         render. Pick up to 3 below — or just hit the button.

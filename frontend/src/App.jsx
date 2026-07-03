@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchMaterials } from "./api.js";
 import { useRenderQueue } from "./hooks/useRenderQueue.js";
+import StepCard from "./components/StepCard.jsx";
 import PhotoStrip from "./components/PhotoStrip.jsx";
 import MaterialPicker from "./components/MaterialPicker.jsx";
-import ModeSelector from "./components/ModeSelector.jsx";
+import ModeSelector, { PROJECT_TYPES } from "./components/ModeSelector.jsx";
 import Toggles from "./components/Toggles.jsx";
 import ResultsGallery from "./components/ResultsGallery.jsx";
 import HeroSection from "./components/HeroSection.jsx";
@@ -15,9 +16,10 @@ export default function App() {
   const [loadError, setLoadError] = useState(null);
   const [photos, setPhotos] = useState([]);
   const [materialId, setMaterialId] = useState(null);
-  const [mode, setMode] = useState("resurface");
+  const [mode, setMode] = useState(null); // the sales conversation starts here
   const [declutter, setDeclutter] = useState(false);
   const [stageFurniture, setStageFurniture] = useState(false);
+  const [openStep, setOpenStep] = useState("type");
 
   const { enqueue } = useRenderQueue(setPhotos);
   const resultsRef = useRef(null);
@@ -27,6 +29,26 @@ export default function App() {
       .then(setMaterials)
       .catch((e) => setLoadError(e.message));
   }, []);
+
+  const projectType = PROJECT_TYPES.find((t) => t.id === mode);
+  const selectedMaterial = useMemo(
+    () => materials.find((m) => m.id === materialId),
+    [materials, materialId]
+  );
+
+  function toggleStep(step) {
+    setOpenStep((cur) => (cur === step ? null : step));
+  }
+
+  function pickType(id) {
+    setMode(id);
+    setOpenStep("photos"); // advance the conversation
+  }
+
+  function pickMaterial(id) {
+    setMaterialId(id);
+    setOpenStep("options");
+  }
 
   function addPhotos(files) {
     setPhotos((prev) => [
@@ -54,8 +76,8 @@ export default function App() {
   const settings = { materialId, mode, declutter, stageFurniture };
 
   function generateAll() {
+    setOpenStep(null); // fold the controls away, results take the stage
     enqueue(photos, settings);
-    // Give React a beat to show the skeletons, then bring them into view.
     setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth" }), 150);
   }
 
@@ -64,16 +86,13 @@ export default function App() {
   const donePhotos = photos.filter((p) => p.status === "done");
   const isBusy = busyCount > 0;
 
-  const selectedMaterial = useMemo(
-    () => materials.find((m) => m.id === materialId),
-    [materials, materialId]
-  );
+  const touches = [declutter && "Declutter", stageFurniture && "Stage furniture"].filter(Boolean);
 
   const buttonLabel = isBusy
     ? `Rendering ${Math.min(doneCount + 1, photos.length)} of ${photos.length}…`
     : photos.length > 1
       ? `Visualize ${photos.length} photos`
-      : "Visualize my deck";
+      : "Visualize it";
 
   return (
     <div className="app">
@@ -90,70 +109,105 @@ export default function App() {
         </div>
       )}
 
-      <section className="section">
-        <div className="section-title">
-          <span className="step">1</span> Photos
-        </div>
-        <p className="section-sub">Snap or add one or more photos of the space.</p>
-        <PhotoStrip photos={photos} onAdd={addPhotos} onRemove={removePhoto} />
-      </section>
+      <StepCard
+        number={1}
+        title="Project type"
+        summary={projectType && <>{projectType.icon}&nbsp; <strong>{projectType.name}</strong> — {projectType.desc}</>}
+        complete={!!mode}
+        open={openStep === "type"}
+        onToggle={() => toggleStep("type")}
+      >
+        <ModeSelector mode={mode} onChange={pickType} />
+      </StepCard>
 
-      <section className="section">
-        <div className="section-title">
-          <span className="step">2</span> Material
-          {selectedMaterial && (
-            <span className="tagline" style={{ fontWeight: 500 }}>
-              — {selectedMaterial.brand ? `${selectedMaterial.brand} ` : ""}
-              {selectedMaterial.name}
-            </span>
-          )}
-        </div>
-        <p className="section-sub">Pick the decking the customer is considering.</p>
+      <StepCard
+        number={2}
+        title={projectType ? projectType.photoTitle : "Photos"}
+        summary={
+          photos.length
+            ? <><strong>{photos.length} photo{photos.length > 1 ? "s" : ""}</strong> added</>
+            : "No photos yet"
+        }
+        complete={photos.length > 0}
+        open={openStep === "photos"}
+        onToggle={() => toggleStep("photos")}
+      >
+        <p className="photo-hint">
+          {projectType ? projectType.photoHint : "Snap or add one or more photos."}
+        </p>
+        <PhotoStrip photos={photos} onAdd={addPhotos} onRemove={removePhoto} />
+        {photos.length > 0 && (
+          <button
+            className="btn-secondary"
+            style={{ marginTop: 12 }}
+            onClick={() => setOpenStep("material")}
+          >
+            Next: choose material →
+          </button>
+        )}
+      </StepCard>
+
+      <StepCard
+        number={3}
+        title="Material"
+        summary={
+          selectedMaterial && (
+            <>
+              <strong>
+                {selectedMaterial.brand ? `${selectedMaterial.brand} ` : ""}
+                {selectedMaterial.name}
+              </strong>
+              {selectedMaterial.collection ? ` · ${selectedMaterial.collection}` : ""}
+            </>
+          )
+        }
+        complete={!!materialId}
+        open={openStep === "material"}
+        onToggle={() => toggleStep("material")}
+      >
         <MaterialPicker
           materials={materials}
           selectedId={materialId}
-          onSelect={setMaterialId}
+          onSelect={pickMaterial}
         />
-      </section>
+      </StepCard>
 
-      <section className="section">
-        <div className="section-title">
-          <span className="step">3</span> Project type
-        </div>
-        <p className="section-sub">What are we doing to this space?</p>
-        <ModeSelector mode={mode} onChange={setMode} />
-      </section>
-
-      <section className="section">
-        <div className="section-title">
-          <span className="step">4</span> Finishing touches
-        </div>
-        <p className="section-sub">Optional — applied to every photo.</p>
+      <StepCard
+        number={4}
+        title="Finishing touches"
+        summary={touches.length ? <strong>{touches.join(" + ")}</strong> : "None — photo stays as-is"}
+        complete
+        open={openStep === "options"}
+        onToggle={() => toggleStep("options")}
+      >
         <Toggles
           declutter={declutter}
           stageFurniture={stageFurniture}
           onDeclutter={setDeclutter}
           onStage={setStageFurniture}
         />
-      </section>
+      </StepCard>
 
-      <section className="section" ref={resultsRef}>
+      <div ref={resultsRef}>
+        {photos.some((p) => p.status !== "idle") && (
+          <div className="results-title">Results</div>
+        )}
         <ResultsGallery
           photos={photos}
           onRetry={(photo) => enqueue([photo], settings)}
         />
-      </section>
+      </div>
 
       {donePhotos.length > 0 && !isBusy && (
-        <section className="section">
+        <div style={{ marginTop: 20 }}>
           <HeroSection donePhotos={donePhotos} materialId={materialId} />
-        </section>
+        </div>
       )}
 
       <div className="generate-bar">
         <button
           className="generate-btn"
-          disabled={!photos.length || !materialId || isBusy}
+          disabled={!photos.length || !materialId || !mode || isBusy}
           onClick={generateAll}
         >
           {isBusy && <span className="spinner" />}
