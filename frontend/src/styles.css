@@ -760,6 +760,53 @@ button { font-family: inherit; cursor: pointer; color: inherit; }
 }
 .pin-card input:focus { border-color: var(--accent); }
 
+/* ============ Custom prompt (console) & refine ============ */
+.custom-prompt-label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 13px;
+  font-weight: 650;
+}
+.custom-prompt-label .optional {
+  font-weight: 480;
+  color: var(--text-dim);
+  margin-left: 4px;
+}
+.custom-prompt {
+  width: 100%;
+  resize: vertical;
+  min-height: 52px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  outline: none;
+}
+.custom-prompt:focus { border-color: var(--accent); }
+
+.refine-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.refine-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  outline: none;
+}
+.refine-row input:focus { border-color: var(--accent); }
+.refine-row .btn-secondary { flex: none; }
+
 /* ============ Project bar & modal ============ */
 .project-bar { margin: 2px 0 4px; }
 .project-chip {

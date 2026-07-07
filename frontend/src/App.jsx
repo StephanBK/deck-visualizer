@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchMaterials, AuthError } from "./api.js";
+import { fetchMaterials, refineResult, AuthError } from "./api.js";
 import { useRenderQueue } from "./hooks/useRenderQueue.js";
 import StepCard from "./components/StepCard.jsx";
 import PhotoStrip from "./components/PhotoStrip.jsx";
@@ -34,6 +34,7 @@ export default function App() {
   const [mode, setMode] = useState(null); // the sales conversation starts here
   const [declutter, setDeclutter] = useState(false);
   const [stageFurniture, setStageFurniture] = useState(false);
+  const [customPrompt, setCustomPrompt] = useState("");
   const [openStep, setOpenStep] = useState("type");
   const [project, setProject] = useState(() => readJSON("currentProject", null));
   const [favorites, setFavorites] = useState(() => readJSON("favMaterials", []));
@@ -114,7 +115,7 @@ export default function App() {
     });
   }
 
-  const settings = { mode, declutter, stageFurniture, projectId: project?.id };
+  const settings = { mode, declutter, stageFurniture, customPrompt, projectId: project?.id };
 
   function generateAll() {
     const specs = [];
@@ -141,8 +142,44 @@ export default function App() {
     setTimeout(() => document.querySelector(".results-title")?.scrollIntoView({ behavior: "smooth" }), 200);
   }
 
+  // Refine jobs run outside useRenderQueue: one direct call per tweak. The
+  // "only update while still rendering" guard keeps a Cancel tap final even
+  // though the fetch itself isn't aborted.
+  async function runRefine(refJob) {
+    setJobs((prev) =>
+      prev.some((j) => j.id === refJob.id)
+        ? prev.map((j) => (j.id === refJob.id
+            ? { ...refJob, status: "rendering", startedAt: Date.now(), error: null, afterUrl: null }
+            : j))
+        : [...prev, { ...refJob, status: "rendering", startedAt: Date.now() }]
+    );
+    const patch = (p) =>
+      setJobs((prev) => prev.map((j) => (j.id === refJob.id && j.status === "rendering" ? { ...j, ...p } : j)));
+    try {
+      const result = await refineResult(refJob.sourceResultName, refJob.refineInstruction, project?.id);
+      patch({ status: "done", afterUrl: result.after_url, resultName: result.after_url.split("/").pop() });
+    } catch (e) {
+      patch({ status: "error", error: e.message });
+    }
+  }
+
+  function refineJob(job, instruction) {
+    runRefine({
+      ...job,
+      id: `${job.id}:r${nextId++}`,
+      kind: "refine",
+      sourceResultName: job.resultName,
+      refineInstruction: instruction,
+      materialName: `${job.materialName} · refined`,
+      afterUrl: null,
+      resultName: null,
+      error: null,
+    });
+  }
+
   function retryJob(job) {
-    enqueue([job], settings);
+    if (job.kind === "refine") runRefine(job);
+    else enqueue([job], settings);
   }
 
   const busyCount = jobs.filter((j) => j.status === "queued" || j.status === "rendering").length;
@@ -150,7 +187,11 @@ export default function App() {
   const isBusy = busyCount > 0;
   const totalJobs = photos.length * materialIds.length;
 
-  const touches = [declutter && "Declutter", stageFurniture && "Stage furniture"].filter(Boolean);
+  const touches = [
+    declutter && "Declutter",
+    stageFurniture && "Stage furniture",
+    customPrompt.trim() && "Special requests",
+  ].filter(Boolean);
 
   const buttonLabel = isBusy
     ? `Rendering ${Math.min(doneJobs.length + 1, jobs.length)} of ${jobs.length}…`
@@ -279,6 +320,18 @@ export default function App() {
           onDeclutter={setDeclutter}
           onStage={setStageFurniture}
         />
+        <label className="custom-prompt-label" htmlFor="custom-prompt">
+          Special requests <span className="optional">optional</span>
+        </label>
+        <textarea
+          id="custom-prompt"
+          className="custom-prompt"
+          rows={2}
+          maxLength={500}
+          placeholder='e.g. "keep the grill where it is", "darker railing"'
+          value={customPrompt}
+          onChange={(e) => setCustomPrompt(e.target.value)}
+        />
       </StepCard>
 
       {jobs.length > 0 && <div className="results-title">Results</div>}
@@ -287,6 +340,7 @@ export default function App() {
         jobs={jobs}
         onRetry={retryJob}
         onCancel={cancel}
+        onRefine={refineJob}
         onOpenViewer={(job) =>
           setViewer({ beforeSrc: job.photo.previewUrl, afterSrc: job.afterUrl, label: job.materialName })
         }

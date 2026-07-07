@@ -147,8 +147,10 @@ FUSION_QUALITY_CLAUSE = (
 )
 
 
-def build_instruction(material, mode="resurface", declutter=False, stage_furniture=False):
-    """Full Gemini instruction for one render: mode template + keep-list + toggles."""
+def build_instruction(material, mode="resurface", declutter=False, stage_furniture=False,
+                      custom_instructions=""):
+    """Full Gemini instruction for one render: mode template + keep-list + toggles
+    + optional free-text requests from the sales rep (or the recorded client)."""
     if mode not in MODES:
         raise ValueError(f"unknown mode: {mode!r} (expected one of {MODES})")
 
@@ -169,8 +171,26 @@ def build_instruction(material, mode="resurface", declutter=False, stage_furnitu
         parts.append(STAGE_CLAUSE)
     if not declutter and not stage_furniture:
         parts.append(STRICT_CLAUSE)
+    custom = (custom_instructions or "").strip()
+    if custom:
+        parts.append(
+            "ADDITIONAL CLIENT REQUESTS (follow where compatible with the task "
+            f"above): {custom}"
+        )
     parts.append(QUALITY_CLAUSE)
     return " ".join(parts)
+
+
+def build_refine_instruction(instruction):
+    """Instruction for iterating on an already-rendered result: apply one
+    free-text tweak, hold everything else still."""
+    return (
+        "The attached image is an AI deck visualization. Edit it according to "
+        f"this request: {instruction.strip()}. "
+        "Change ONLY what the request asks for; keep everything else — the deck "
+        "material, structure, camera angle, lighting, and all surroundings — "
+        "EXACTLY as in the attached image. " + QUALITY_CLAUSE
+    )
 
 
 def build_fusion_instruction(material=None):

@@ -306,6 +306,7 @@ async def render(
     mode: str = Form("resurface"),
     declutter: bool = Form(False),
     stage_furniture: bool = Form(False),
+    custom_instructions: str = Form(""),
     project_id: str = Form(None),
 ):
     """Upload a deck photo + a material id (+ options) -> URL of the rendered image."""
@@ -341,7 +342,8 @@ async def render(
     swatch = pb.swatch_abs_path(material)
     instruction = pb.build_instruction(material, mode=mode,
                                        declutter=declutter,
-                                       stage_furniture=stage_furniture)
+                                       stage_furniture=stage_furniture,
+                                       custom_instructions=custom_instructions.strip()[:500])
     try:
         result_img = await run_in_threadpool(
             generate_image, [upload_path, swatch], instruction)
@@ -442,6 +444,51 @@ async def fusion(req: FusionRequest):
         project["heroes"].append({"hero_url": hero_url, "created_at": time.time()})
         save_project(project)
     return JSONResponse({"hero_url": hero_url})
+
+
+class RefineRequest(BaseModel):
+    result_name: str
+    instruction: str = Field(..., min_length=1, max_length=500)
+    project_id: str | None = None
+
+
+@app.post("/api/refine", dependencies=[Depends(require_pin)])
+async def refine(req: RefineRequest):
+    """Iterate on an already-rendered result with a free-text tweak
+    ('make the railing white') -> URL of the new image."""
+    safe = os.path.basename(req.result_name)   # no path tricks
+    path = os.path.join(RESULTS_DIR, safe)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail=f"Unknown result: {safe}")
+    if req.project_id:
+        load_project(req.project_id)  # validate before burning budget
+    instruction = pb.build_refine_instruction(req.instruction)
+    take_render_slot()
+    try:
+        result_img = await run_in_threadpool(generate_image, [path], instruction)
+    except GeminiError as e:
+        raise HTTPException(status_code=502, detail=f"Refine failed: {e}")
+
+    result_img = stamp_disclaimer(result_img)
+    prefix = "p_" if req.project_id else ""
+    result_name = f"{prefix}{uuid.uuid4().hex}.jpg"
+    result_img.save(os.path.join(RESULTS_DIR, result_name), quality=90)
+    after_url = f"/api/results/{result_name}"
+    if req.project_id:
+        # fresh load + sync append/save — same race note as /api/render
+        project = load_project(req.project_id)
+        project["items"].append({
+            "before_url": f"/api/results/{safe}",
+            "after_url": after_url,
+            "material_id": None,
+            "material_name": "Refined",
+            "brand": "",
+            "mode": "refine",
+            "instruction": req.instruction,
+            "created_at": time.time(),
+        })
+        save_project(project)
+    return JSONResponse({"after_url": after_url})
 
 
 # Serve the built frontend (frontend/dist) at the root. MUST be the last route:

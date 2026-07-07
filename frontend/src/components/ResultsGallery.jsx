@@ -12,7 +12,34 @@ function Elapsed({ since }) {
   return <>{secs}s{secs > 35 ? " — almost there…" : ""}</>;
 }
 
-function JobBody({ job, onRetry, onCancel, onOpenViewer }) {
+// Inline free-text tweak on a finished render ("make the railing white").
+function RefineRow({ job, onRefine }) {
+  const [text, setText] = useState("");
+  return (
+    <div className="refine-row">
+      <input
+        type="text"
+        maxLength={500}
+        placeholder='Tweak it — e.g. "make the railing white"'
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && text.trim() && (onRefine(job, text.trim()), setText(""))}
+      />
+      <button
+        className="btn-secondary"
+        disabled={!text.trim()}
+        onClick={() => {
+          onRefine(job, text.trim());
+          setText("");
+        }}
+      >
+        ✨ Go
+      </button>
+    </div>
+  );
+}
+
+function JobBody({ job, onRetry, onCancel, onOpenViewer, onRefine }) {
   if (job.status === "queued" || job.status === "rendering") {
     return (
       <div className="skeleton skeleton-result">
@@ -56,11 +83,12 @@ function JobBody({ job, onRetry, onCancel, onOpenViewer }) {
           <a className="btn-secondary" href={job.afterUrl} download>↓</a>
         </span>
       </div>
+      <RefineRow job={job} onRefine={onRefine} />
     </>
   );
 }
 
-function PhotoCard({ photo, jobs, onRetry, onCancel, onOpenViewer }) {
+function PhotoCard({ photo, jobs, onRetry, onCancel, onOpenViewer, onRefine }) {
   const [activeId, setActiveId] = useState(jobs[0]?.id);
   // keep a sensible active tab: prefer the first finished render
   useEffect(() => {
@@ -85,12 +113,12 @@ function PhotoCard({ photo, jobs, onRetry, onCancel, onOpenViewer }) {
           ))}
         </div>
       )}
-      <JobBody job={active} onRetry={onRetry} onCancel={onCancel} onOpenViewer={onOpenViewer} />
+      <JobBody job={active} onRetry={onRetry} onCancel={onCancel} onOpenViewer={onOpenViewer} onRefine={onRefine} />
     </div>
   );
 }
 
-export default function ResultsGallery({ photos, jobs, onRetry, onCancel, onOpenViewer }) {
+export default function ResultsGallery({ photos, jobs, onRetry, onCancel, onOpenViewer, onRefine }) {
   if (!jobs.length) return null;
   return (
     <div>
@@ -105,6 +133,7 @@ export default function ResultsGallery({ photos, jobs, onRetry, onCancel, onOpen
             onRetry={onRetry}
             onCancel={onCancel}
             onOpenViewer={onOpenViewer}
+            onRefine={onRefine}
           />
         );
       })}

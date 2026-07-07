@@ -67,16 +67,32 @@ export async function compressImage(file, maxSide = 1600) {
   }
 }
 
-export async function renderPhoto(file, { materialId, mode, declutter, stageFurniture, projectId }, signal) {
+export async function renderPhoto(file, { materialId, mode, declutter, stageFurniture, customPrompt, projectId }, signal) {
   const fd = new FormData();
   fd.append("photo", file);
   fd.append("material_id", materialId);
   fd.append("mode", mode);
   fd.append("declutter", String(declutter));
   fd.append("stage_furniture", String(stageFurniture));
+  if (customPrompt?.trim()) fd.append("custom_instructions", customPrompt.trim());
   if (projectId) fd.append("project_id", projectId);
   const res = await fetch("/api/render", { method: "POST", body: fd, headers: pinHeaders(), signal });
   await checkOk(res, `Render failed (${res.status})`);
+  return res.json();
+}
+
+// Iterate on a finished render with a free-text tweak.
+export async function refineResult(resultName, instruction, projectId) {
+  const res = await fetch("/api/refine", {
+    method: "POST",
+    headers: pinHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      result_name: resultName,
+      instruction,
+      project_id: projectId || null,
+    }),
+  });
+  await checkOk(res, `Refine failed (${res.status})`);
   return res.json();
 }
 
