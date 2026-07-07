@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchMaterials, refineResult, AuthError } from "./api.js";
 import { useRenderQueue } from "./hooks/useRenderQueue.js";
-import StepCard from "./components/StepCard.jsx";
+import { WizardNav, WizardFooter } from "./components/Wizard.jsx";
 import PhotoStrip from "./components/PhotoStrip.jsx";
 import MaterialPicker, { MAX_MATERIALS } from "./components/MaterialPicker.jsx";
 import ModeSelector, { PROJECT_TYPES } from "./components/ModeSelector.jsx";
@@ -35,7 +35,7 @@ export default function App() {
   const [declutter, setDeclutter] = useState(false);
   const [stageFurniture, setStageFurniture] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
-  const [openStep, setOpenStep] = useState("type");
+  const [wizStep, setWizStep] = useState("type");
   const [project, setProject] = useState(() => readJSON("currentProject", null));
   const [favorites, setFavorites] = useState(() => readJSON("favMaterials", []));
   const [recents, setRecents] = useState(() => readJSON("recentMaterials", []));
@@ -70,13 +70,14 @@ export default function App() {
     [materials, materialIds]
   );
 
-  function toggleStep(step) {
-    setOpenStep((cur) => (cur === step ? null : step));
+  function goStep(id) {
+    setWizStep(id);
+    window.scrollTo({ top: 0 });
   }
 
   function pickType(id) {
     setMode(id);
-    setOpenStep("photos"); // advance the conversation
+    goStep("photos"); // advance the conversation
   }
 
   function toggleMaterial(id) {
@@ -137,9 +138,8 @@ export default function App() {
     }
     setJobs(specs);
     setRecents((prev) => [...new Set([...materialIds, ...prev])].slice(0, 8));
-    setOpenStep(null); // fold the controls away, results take the stage
     enqueue(specs, settings);
-    setTimeout(() => document.querySelector(".results-title")?.scrollIntoView({ behavior: "smooth" }), 200);
+    goStep("results");
   }
 
   // Refine jobs run outside useRenderQueue: one direct call per tweak. The
@@ -187,11 +187,15 @@ export default function App() {
   const isBusy = busyCount > 0;
   const totalJobs = photos.length * materialIds.length;
 
-  const touches = [
-    declutter && "Declutter",
-    stageFurniture && "Stage furniture",
-    customPrompt.trim() && "Special requests",
-  ].filter(Boolean);
+  // "valid" drives both the ✓ badge and how far ahead the dots unlock.
+  // Options has nothing required, so it only reads done once a run happened.
+  const wizValid = {
+    type: !!mode,
+    photos: photos.length > 0,
+    material: materialIds.length > 0,
+    options: jobs.length > 0,
+    results: jobs.length > 0,
+  };
 
   const buttonLabel = isBusy
     ? `Rendering ${Math.min(doneJobs.length + 1, jobs.length)} of ${jobs.length}…`
@@ -243,125 +247,127 @@ export default function App() {
         </div>
       )}
 
-      <StepCard
-        number={1}
-        title="Project type"
-        summary={projectType && <>{projectType.icon}&nbsp; <strong>{projectType.name}</strong> — {projectType.desc}</>}
-        complete={!!mode}
-        open={openStep === "type"}
-        onToggle={() => toggleStep("type")}
-      >
-        <ModeSelector mode={mode} onChange={pickType} />
-      </StepCard>
+      <WizardNav step={wizStep} valid={wizValid} onJump={goStep} />
 
-      <StepCard
-        number={2}
-        title={projectType ? projectType.photoTitle : "Photos"}
-        summary={
-          photos.length
-            ? <><strong>{photos.length} photo{photos.length > 1 ? "s" : ""}</strong> added</>
-            : "No photos yet"
-        }
-        complete={photos.length > 0}
-        open={openStep === "photos"}
-        onToggle={() => toggleStep("photos")}
-      >
-        <p className="photo-hint">
-          {projectType ? projectType.photoHint : "Snap or add one or more photos."}
-        </p>
-        <PhotoStrip photos={photos} onAdd={addPhotos} onRemove={removePhoto} />
-        {photos.length > 0 && (
-          <button
-            className="btn-secondary"
-            style={{ marginTop: 12 }}
-            onClick={() => setOpenStep("material")}
-          >
-            Next: choose materials →
-          </button>
-        )}
-      </StepCard>
-
-      <StepCard
-        number={3}
-        title="Materials"
-        summary={
-          selectedMaterials.length > 0 && (
-            <>
-              <strong>{selectedMaterials[0].name}</strong>
-              {selectedMaterials.length > 1 && <> + {selectedMaterials.length - 1} more to compare</>}
-            </>
-          )
-        }
-        complete={materialIds.length > 0}
-        open={openStep === "material"}
-        onToggle={() => toggleStep("material")}
-      >
-        <MaterialPicker
-          materials={materials}
-          selectedIds={materialIds}
-          onToggle={toggleMaterial}
-          favorites={favorites}
-          recents={recents}
-          onToggleFav={toggleFav}
-        />
-      </StepCard>
-
-      <StepCard
-        number={4}
-        title="Finishing touches"
-        summary={touches.length ? <strong>{touches.join(" + ")}</strong> : "None — photo stays as-is"}
-        complete
-        open={openStep === "options"}
-        onToggle={() => toggleStep("options")}
-      >
-        <Toggles
-          declutter={declutter}
-          stageFurniture={stageFurniture}
-          onDeclutter={setDeclutter}
-          onStage={setStageFurniture}
-        />
-        <label className="custom-prompt-label" htmlFor="custom-prompt">
-          Special requests <span className="optional">optional</span>
-        </label>
-        <textarea
-          id="custom-prompt"
-          className="custom-prompt"
-          rows={2}
-          maxLength={500}
-          placeholder='e.g. "keep the grill where it is", "darker railing"'
-          value={customPrompt}
-          onChange={(e) => setCustomPrompt(e.target.value)}
-        />
-      </StepCard>
-
-      {jobs.length > 0 && <div className="results-title">Results</div>}
-      <ResultsGallery
-        photos={photos}
-        jobs={jobs}
-        onRetry={retryJob}
-        onCancel={cancel}
-        onRefine={refineJob}
-        onOpenViewer={(job) =>
-          setViewer({ beforeSrc: job.photo.previewUrl, afterSrc: job.afterUrl, label: job.materialName })
-        }
-      />
-
-      {doneJobs.length > 0 && !isBusy && (
-        <div style={{ marginTop: 20 }}>
-          <HeroSection doneJobs={doneJobs} projectId={project?.id} />
-        </div>
+      {wizStep === "type" && (
+        <section className="wiz-screen">
+          <h2 className="wiz-title">What kind of project is this?</h2>
+          <ModeSelector mode={mode} onChange={pickType} />
+        </section>
       )}
 
-      <div className="generate-bar">
-        <button
-          className="generate-btn"
-          disabled={!photos.length || !materialIds.length || !mode || isBusy}
-          onClick={generateAll}
-        >
-          {isBusy && <span className="spinner" />}
-          {buttonLabel}
-        </button>
-      </div>
+      {wizStep === "photos" && (
+        <section className="wiz-screen">
+          <h2 className="wiz-title">{projectType ? projectType.photoTitle : "Photos"}</h2>
+          <p className="photo-hint">
+            {projectType ? projectType.photoHint : "Snap or add one or more photos."}
+          </p>
+          <PhotoStrip photos={photos} onAdd={addPhotos} onRemove={removePhoto} />
+        </section>
+      )}
+
+      {wizStep === "material" && (
+        <section className="wiz-screen">
+          <h2 className="wiz-title">Pick materials</h2>
+          <p className="photo-hint">Choose up to {MAX_MATERIALS} to compare side by side.</p>
+          <MaterialPicker
+            materials={materials}
+            selectedIds={materialIds}
+            onToggle={toggleMaterial}
+            favorites={favorites}
+            recents={recents}
+            onToggleFav={toggleFav}
+          />
+        </section>
+      )}
+
+      {wizStep === "options" && (
+        <section className="wiz-screen">
+          <h2 className="wiz-title">Finishing touches</h2>
+          <p className="wiz-recap">
+            {projectType?.icon} {projectType?.name} · {photos.length} photo{photos.length > 1 ? "s" : ""} ·{" "}
+            {selectedMaterials.map((m) => m.name).join(", ")}
+          </p>
+          <Toggles
+            declutter={declutter}
+            stageFurniture={stageFurniture}
+            onDeclutter={setDeclutter}
+            onStage={setStageFurniture}
+          />
+          <label className="custom-prompt-label" htmlFor="custom-prompt">
+            Special requests <span className="optional">optional</span>
+          </label>
+          <textarea
+            id="custom-prompt"
+            className="custom-prompt"
+            rows={2}
+            maxLength={500}
+            placeholder='e.g. "keep the grill where it is", "darker railing"'
+            value={customPrompt}
+            onChange={(e) => setCustomPrompt(e.target.value)}
+          />
+        </section>
+      )}
+
+      {wizStep === "results" && (
+        <section className="wiz-screen">
+          <div className="results-title">Results</div>
+          <ResultsGallery
+            photos={photos}
+            jobs={jobs}
+            onRetry={retryJob}
+            onCancel={cancel}
+            onRefine={refineJob}
+            onOpenViewer={(job) =>
+              setViewer({ beforeSrc: job.photo.previewUrl, afterSrc: job.afterUrl, label: job.materialName })
+            }
+          />
+          {doneJobs.length > 0 && !isBusy && (
+            <div style={{ marginTop: 20 }}>
+              <HeroSection doneJobs={doneJobs} projectId={project?.id} />
+            </div>
+          )}
+        </section>
+      )}
+
+      <WizardFooter
+        onBack={
+          {
+            type: null,
+            photos: () => goStep("type"),
+            material: () => goStep("photos"),
+            options: () => goStep("material"),
+            results: () => goStep("options"),
+          }[wizStep]
+        }
+        backLabel={wizStep === "results" ? "← Adjust" : "← Back"}
+      >
+        {wizStep === "type" && (
+          <button className="generate-btn" disabled={!mode} onClick={() => goStep("photos")}>
+            Next: photos →
+          </button>
+        )}
+        {wizStep === "photos" && (
+          <button className="generate-btn" disabled={!photos.length} onClick={() => goStep("material")}>
+            Next: materials →
+          </button>
+        )}
+        {wizStep === "material" && (
+          <button className="generate-btn" disabled={!materialIds.length} onClick={() => goStep("options")}>
+            Next: options →
+          </button>
+        )}
+        {(wizStep === "options" || wizStep === "results") && (
+          <button
+            className="generate-btn"
+            disabled={!photos.length || !materialIds.length || !mode || isBusy}
+            onClick={generateAll}
+          >
+            {isBusy && <span className="spinner" />}
+            {buttonLabel}
+          </button>
+        )}
+      </WizardFooter>
 
       {viewer && <FullscreenViewer {...viewer} onClose={() => setViewer(null)} />}
     </div>
