@@ -126,6 +126,26 @@ STAGE_CLAUSE = (
     "planters — arranged naturally, as a professional stager would."
 )
 
+# Appended server-side to EVERY render instruction. Invisible to the app —
+# a tuned quality floor so results look like photographs, not renderings.
+QUALITY_CLAUSE = (
+    "QUALITY REQUIREMENTS: The result must be indistinguishable from a real "
+    "photograph. Deck boards must have realistic width (about 14 cm / 5.5 in), "
+    "visible seams and end-gaps, and subtle natural grain variation between "
+    "boards — never a repeating texture. Preserve the original photo's camera "
+    "angle, focal length, resolution, sharpness, white balance, lighting "
+    "direction, and shadows exactly. Straight edges must stay perfectly "
+    "straight — no warping, bowing, or perspective drift. Keep colors natural "
+    "and true to the material sample; no oversaturated, glossy, or cartoonish "
+    "rendering."
+)
+
+FUSION_QUALITY_CLAUSE = (
+    "The image must read as a professional architectural photograph: realistic "
+    "board scale and seams, natural color grading, straight lines kept straight, "
+    "no cartoonish saturation."
+)
+
 
 def build_instruction(material, mode="resurface", declutter=False, stage_furniture=False):
     """Full Gemini instruction for one render: mode template + keep-list + toggles."""
@@ -149,6 +169,7 @@ def build_instruction(material, mode="resurface", declutter=False, stage_furnitu
         parts.append(STAGE_CLAUSE)
     if not declutter and not stage_furniture:
         parts.append(STRICT_CLAUSE)
+    parts.append(QUALITY_CLAUSE)
     return " ".join(parts)
 
 
@@ -170,7 +191,8 @@ def build_fusion_instruction(material=None):
         "clean composition with subtle depth, photorealistic quality. "
         + material_note +
         "Keep the deck's structure, the house, and all architecture identical to the "
-        "source image(s) — this is a beauty shot of the SAME project, not a new design."
+        "source image(s) — this is a beauty shot of the SAME project, not a new design. "
+        + FUSION_QUALITY_CLAUSE
     )
 
 
