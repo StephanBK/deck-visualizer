@@ -75,8 +75,8 @@ UPLOAD_DIR = os.path.join(HERE, "uploads")
 FRONTEND_DIST = os.path.normpath(os.path.join(HERE, "..", "frontend", "dist"))
 sys.path.insert(0, RENDER_DIR)
 
-import prompt_builder as pb                             # noqa: E402
-from gemini_edit import generate_image, GeminiError     # noqa: E402
+import prompt_builder as pb                                            # noqa: E402
+from gemini_edit import generate_image, analyze_audio, GeminiError     # noqa: E402
 
 os.makedirs(RESULTS_DIR, exist_ok=True)
 os.makedirs(PROJECTS_DIR, exist_ok=True)
@@ -343,7 +343,7 @@ async def render(
     instruction = pb.build_instruction(material, mode=mode,
                                        declutter=declutter,
                                        stage_furniture=stage_furniture,
-                                       custom_instructions=custom_instructions.strip()[:500])
+                                       custom_instructions=custom_instructions.strip()[:1000])
     try:
         result_img = await run_in_threadpool(
             generate_image, [upload_path, swatch], instruction)
@@ -444,6 +444,82 @@ async def fusion(req: FusionRequest):
         project["heroes"].append({"hero_url": hero_url, "created_at": time.time()})
         save_project(project)
     return JSONResponse({"hero_url": hero_url})
+
+
+TRANSCRIBE_PROMPT = (
+    "You are listening to a recorded conversation between a deck-construction "
+    "sales rep and a homeowner about the homeowner's deck project. "
+    "Respond with STRICT JSON only — no markdown fences, no commentary — with "
+    "exactly these keys:\n"
+    '  "transcript": a clean transcript of the conversation,\n'
+    '  "preferences": a list of short, actionable phrases describing how the '
+    "customer wants the deck to LOOK or FUNCTION (colors, materials, style, "
+    "features, things to keep or avoid). Only include preferences the customer "
+    "actually expressed,\n"
+    '  "summary": one short paragraph summarizing what the customer is looking for.'
+)
+
+MAX_AUDIO_MB = 20
+
+
+def _parse_transcription(text):
+    """Best-effort JSON parse of the model's reply; fall back to raw text so a
+    sloppy response still gives the rep something to review and edit."""
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+    try:
+        data = json.loads(cleaned)
+        return {
+            "transcript": str(data.get("transcript", "")),
+            "preferences": [str(p) for p in data.get("preferences", []) if str(p).strip()],
+            "summary": str(data.get("summary", "")),
+        }
+    except ValueError:
+        return {"transcript": text, "preferences": [], "summary": text[:300]}
+
+
+@app.post("/api/transcribe", dependencies=[Depends(require_pin)])
+async def transcribe(audio: UploadFile = File(...), project_id: str = Form(None)):
+    """Recorded client conversation -> transcript + extracted deck preferences.
+    The frontend shows these for review/editing before they touch a render."""
+    if project_id:
+        load_project(project_id)  # 404s before burning budget
+    data = await audio.read()
+    if len(data) > MAX_AUDIO_MB * 1024 * 1024:
+        raise HTTPException(status_code=413,
+                            detail=f"Recording too large (max {MAX_AUDIO_MB} MB)")
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty recording")
+    take_render_slot()  # transcription is cheap, but keep it under the spend cap
+
+    mime = audio.content_type or "audio/mp4"
+    audio_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}.audio")
+    with open(audio_path, "wb") as f:
+        f.write(data)
+    try:
+        text = await run_in_threadpool(analyze_audio, audio_path, mime, TRANSCRIBE_PROMPT)
+    except GeminiError as e:
+        raise HTTPException(status_code=502, detail=f"Transcription failed: {e}")
+    finally:
+        try:
+            os.remove(audio_path)
+        except OSError:
+            pass
+
+    result = _parse_transcription(text)
+    if project_id:
+        # fresh load + sync append/save — same race note as /api/render
+        project = load_project(project_id)
+        project.setdefault("notes", []).append({
+            "transcript": result["transcript"],
+            "summary": result["summary"],
+            "created_at": time.time(),
+        })
+        save_project(project)
+    return JSONResponse(result)
 
 
 class RefineRequest(BaseModel):

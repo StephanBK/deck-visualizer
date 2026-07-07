@@ -81,6 +81,17 @@ export async function renderPhoto(file, { materialId, mode, declutter, stageFurn
   return res.json();
 }
 
+// Recorded client conversation -> {transcript, preferences[], summary}.
+export async function transcribeAudio(blob, projectId) {
+  const ext = (blob.type || "").includes("webm") ? "webm" : "m4a";
+  const fd = new FormData();
+  fd.append("audio", new File([blob], `conversation.${ext}`, { type: blob.type || "audio/mp4" }));
+  if (projectId) fd.append("project_id", projectId);
+  const res = await fetch("/api/transcribe", { method: "POST", body: fd, headers: pinHeaders() });
+  await checkOk(res, `Transcription failed (${res.status})`);
+  return res.json();
+}
+
 // Iterate on a finished render with a free-text tweak.
 export async function refineResult(resultName, instruction, projectId) {
   const res = await fetch("/api/refine", {

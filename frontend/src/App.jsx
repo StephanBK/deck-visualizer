@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchMaterials, refineResult, AuthError } from "./api.js";
 import { useRenderQueue } from "./hooks/useRenderQueue.js";
 import { WizardNav, WizardFooter } from "./components/Wizard.jsx";
+import RecorderPanel from "./components/RecorderPanel.jsx";
 import PhotoStrip from "./components/PhotoStrip.jsx";
 import MaterialPicker, { MAX_MATERIALS } from "./components/MaterialPicker.jsx";
 import ModeSelector, { PROJECT_TYPES } from "./components/ModeSelector.jsx";
@@ -35,6 +36,8 @@ export default function App() {
   const [declutter, setDeclutter] = useState(false);
   const [stageFurniture, setStageFurniture] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [clientNotes, setClientNotes] = useState(""); // extracted from a recorded conversation
+  const [useClientNotes, setUseClientNotes] = useState(false);
   const [wizStep, setWizStep] = useState("type");
   const [project, setProject] = useState(() => readJSON("currentProject", null));
   const [favorites, setFavorites] = useState(() => readJSON("favMaterials", []));
@@ -116,7 +119,16 @@ export default function App() {
     });
   }
 
-  const settings = { mode, declutter, stageFurniture, customPrompt, projectId: project?.id };
+  // Manual special requests + (optionally) the reviewed conversation notes
+  // travel to the backend as one custom_instructions string.
+  const effectivePrompt = [
+    customPrompt.trim(),
+    useClientNotes && clientNotes.trim()
+      ? `The customer said they want: ${clientNotes.trim()}`
+      : "",
+  ].filter(Boolean).join(" ");
+
+  const settings = { mode, declutter, stageFurniture, customPrompt: effectivePrompt, projectId: project?.id };
 
   function generateAll() {
     const specs = [];
@@ -329,6 +341,18 @@ export default function App() {
           )}
         </section>
       )}
+
+      {/* Stays mounted (only hidden) so a running recording survives
+          navigating between the Photos and Options screens. */}
+      <div style={{ display: wizStep === "photos" || wizStep === "options" ? undefined : "none" }}>
+        <RecorderPanel
+          projectId={project?.id}
+          notes={clientNotes}
+          onNotes={setClientNotes}
+          useNotes={useClientNotes}
+          onUseNotes={setUseClientNotes}
+        />
+      </div>
 
       <WizardFooter
         onBack={

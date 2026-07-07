@@ -29,6 +29,11 @@ from PIL import Image
 MODEL = "gemini-2.5-flash-image"
 ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
 
+# Text/audio sibling of the image model — used to transcribe recorded client
+# conversations. Same key, same REST shape, text response instead of an image.
+TEXT_MODEL = "gemini-2.5-flash"
+TEXT_ENDPOINT = f"https://generativelanguage.googleapis.com/v1beta/models/{TEXT_MODEL}:generateContent"
+
 
 class GeminiError(RuntimeError):
     pass
@@ -99,6 +104,50 @@ def generate_image(image_paths, instruction, retries=1):
             if r.status_code != 200:
                 raise GeminiError(f"HTTP {r.status_code}: {r.text[:400]}")
             return _extract_image(r.json())
+        except (requests.RequestException, GeminiError) as e:
+            last_err = e
+            if attempt < retries:
+                time.sleep(1.5)
+                continue
+            raise
+    raise last_err  # unreachable, but explicit
+
+
+def _extract_text(resp_json):
+    """Join all text parts of the response; error if there are none."""
+    candidates = resp_json.get("candidates") or []
+    if not candidates:
+        raise GeminiError(f"No candidates in response: {resp_json}")
+    parts = candidates[0].get("content", {}).get("parts", []) or []
+    texts = [p["text"] for p in parts if p.get("text")]
+    if not texts:
+        raise GeminiError("Model returned no text.")
+    return "\n".join(texts)
+
+
+def analyze_audio(audio_path, mime_type, prompt, retries=1):
+    """Send one audio file + an instruction to the text model; return its text."""
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise GeminiError("GEMINI_API_KEY not set.")
+
+    with open(audio_path, "rb") as f:
+        audio_b64 = base64.b64encode(f.read()).decode()
+    payload = {
+        "contents": [{"parts": [
+            {"text": prompt},
+            {"inline_data": {"mime_type": mime_type, "data": audio_b64}},
+        ]}],
+    }
+    headers = {"x-goog-api-key": api_key, "Content-Type": "application/json"}
+
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.post(TEXT_ENDPOINT, headers=headers, json=payload, timeout=90)
+            if r.status_code != 200:
+                raise GeminiError(f"HTTP {r.status_code}: {r.text[:400]}")
+            return _extract_text(r.json())
         except (requests.RequestException, GeminiError) as e:
             last_err = e
             if attempt < retries:
