@@ -8,7 +8,8 @@ const STATUS_LABELS = {
 };
 
 export default function PhotoStrip({ photos, onAdd, onRemove }) {
-  const inputRef = useRef(null);
+  const cameraRef = useRef(null);
+  const libraryRef = useRef(null);
 
   function handleFiles(e) {
     const files = Array.from(e.target.files || []);
@@ -33,16 +34,30 @@ export default function PhotoStrip({ photos, onAdd, onRemove }) {
           </button>
         </div>
       ))}
-      <button className="add-tile" onClick={() => inputRef.current?.click()}>
-        <span className="plus">+</span>
-        {photos.length ? "Add more" : "Take / add photos"}
+      <button className="add-tile" onClick={() => cameraRef.current?.click()}>
+        <span className="plus">📷</span>
+        Take photo
       </button>
+      <button className="add-tile" onClick={() => libraryRef.current?.click()}>
+        <span className="plus">🖼</span>
+        Photo library
+      </button>
+      {/* capture forces the camera on iPad; the library input omits it so iOS
+          offers the photo gallery instead */}
       <input
-        ref={inputRef}
+        ref={cameraRef}
         className="visually-hidden"
         type="file"
         accept="image/*"
         capture="environment"
+        multiple
+        onChange={handleFiles}
+      />
+      <input
+        ref={libraryRef}
+        className="visually-hidden"
+        type="file"
+        accept="image/*"
         multiple
         onChange={handleFiles}
       />
