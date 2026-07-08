@@ -1,10 +1,11 @@
 # "How It's Built" Animation — Plan & Status (2026-07-08)
 
-**Status: prototype v2 approved-pending-review; NOT yet in the app.**
-Prototype lives as a Claude artifact (standalone HTML, self-contained):
+**Status: v3.1 accepted by Stephan as a "decent first take" — NOT yet in the app.**
+**Source of truth: [`prototypes/deck-build-animation.html`](../prototypes/deck-build-animation.html)**
+(self-contained, no dependencies — open directly in any browser).
+Live preview artifact (same content, may drift — the repo file wins):
 https://claude.ai/code/artifact/a7a5b7a4-fd2b-474a-b174-a36dd4e5cfa0
-Local source of truth for the prototype is the artifact HTML (session scratchpad);
-when it's approved, port it into the frontend as a React component.
+Next milestone: port it into the frontend as a React component on the Results screen.
 
 ## Decisions made (Stephan, 2026-07-07/08)
 
@@ -28,6 +29,15 @@ when it's approved, port it into the frontend as a React component.
    part, clouds, warmer wood. Stephan wants it "a bit more stylized" — v3 is
    the current calibration point. Step-specific callouts (ledger dimension,
    footing label) now show only during their own step (`data-only` attr).
+6. **v3.1 (2026-07-08):** per Stephan — (a) in-scene labels must never be
+   overlaid by the drawing → white backing plates behind all SVG labels;
+   (b) visible FASTENERS everywhere for a feeling of safety → staggered
+   ledger bolt rows (DCA-6 pattern), bolted steel post anchors, column base
+   collars, steel post caps at the beam, galvanized hanger under every joist,
+   2 screws per board at every joist crossing (144 dots), through-bolted
+   railing posts; captions rewritten to tell the hardware/safety story.
+   Also fixed: beam now actually centered over the columns (was offset).
+   Stephan: "decent first take" → saved to prototypes/.
 
 ## How the prototype works (port notes)
 
