@@ -20,6 +20,14 @@ when it's approved, port it into the frontend as a React component.
    dusk + string-lights finale. v1 (flat 2D side-view) was rejected: too static,
    and the deck rendered too high on the house (proportions must read true —
    deck surface just below the patio-door threshold, columns to the ground).
+5. **Style (v3 feedback, 2026-07-08):** v2 STILL read too high (door threshold
+   was drawn ~5' above grade) and colors were washed out. v3 fixes: door sits
+   just above grade with the deck hugging it; the yard SLOPES AWAY from the
+   house (gz(y) helper) so outer columns stay tall and dramatic; richer
+   saturated flat-illustration palette with crisp outline strokes on every
+   part, clouds, warmer wood. Stephan wants it "a bit more stylized" — v3 is
+   the current calibration point. Step-specific callouts (ledger dimension,
+   footing label) now show only during their own step (`data-only` attr).
 
 ## How the prototype works (port notes)
 
